@@ -17,5 +17,10 @@ path = "src/bin/main.rs"
 lalrpop = "0.17.2"
 
 [dependencies]
+failure = "0.1.5"
+failure_derive = "0.1.5"
 lalrpop-util = "0.17.2"
+lazy_static = "1.4.0"
+log = "0.4.8"
+env_logger = "0.6.2"
 regex = "0.2.1"
