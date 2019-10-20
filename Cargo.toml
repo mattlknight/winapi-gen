@@ -13,8 +13,8 @@ path = "src/lib.rs"
 name = "winapi_gen"
 path = "src/bin/main.rs"
 
-[build-dependencies] # <-- We added this and everything after!
-lalrpop = "0.17.2"
+# [build-dependencies] # <-- We added this and everything after!
+# lalrpop = "0.17.2"
 
 [dependencies]
 failure = "0.1.5"
