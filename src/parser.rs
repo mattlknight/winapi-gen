@@ -16,10 +16,10 @@ pub struct ParsedLine<'buffer> {
 }
 
 pub struct Parser {
-    file_path: PathBuf,
-    reader: Option<BufReader<fs::File>>,
-    buffer: String,
-    line_num: usize,
+    pub file_path: PathBuf,
+    pub reader: Option<BufReader<fs::File>>,
+    pub buffer: String,
+    pub line_num: usize,
 }
 
 impl Parser {
@@ -35,7 +35,7 @@ impl Parser {
             file_path: path.to_path_buf(),
             reader: None,
             buffer: String::with_capacity(BUFFER_SIZE),
-            line_num: 0,
+            line_num: 1,
         })
     }
 
@@ -52,10 +52,13 @@ impl Parser {
     pub fn read_line<'buffer>(&'buffer mut self) -> BufferResult<'buffer> {
         let reader = self.reader.as_mut().expect("File must be .open()'ed before reading");
         let line_num = self.line_num;
+        debug!("read_line() line_num: {}", line_num);
+        self.buffer.clear();
         let len = reader.read_line(&mut self.buffer)?;
+        debug!("read_line() read_line().len(): {}", len);
         self.line_num += 1;
 
-        debug!("read_chunk() ->  (line_num: {}, bytes_read: {}, buffer: [{:?}])", line_num, len, &self.buffer);
+        debug!("read_line() ->  (line_num: {}, bytes_read: {}, buffer: [{:?}])", line_num, len, &self.buffer);
         
         Ok(ParsedLine {line_num, bytes_read: len, buffer: &self.buffer })
     }
