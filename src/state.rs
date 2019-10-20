@@ -194,20 +194,28 @@ impl<'state> StateMachine<MultiLineComment<'state>> {
 }
 
 impl<'state> StateMachine<MultiLineComment<'state>> {
-    fn finish(mut val: StateMachine<MultiLineComment<'state>>) -> StateMachine<End> {
+    fn finish(mut val: StateMachine<MultiLineComment<'state>>) -> StateMachine<Start> {
         debug!("StateMachine<MultiLineComment>::finish()");
-        
-        let last_char = val.state.this_char_span;
 
-        debug!("StateMachine<MultiLineComment>::finish() last_char: {:?}", last_char);
+        let next_char_location = val.state.this_char_span.location.add_column();
+        let (new_char, char_buffer) = val.state.char_buffer.split_first().expect("First char in StateStart must be a valid char. Otherwise, what's the point even?!");
+        let next_char = char_buffer.first();
+
+        debug!("StateMachine<MultiLineComment>::append() char_location: {} this_char: {:?} next_char: {:?} buff_len: {}", next_char_location, new_char, next_char, char_buffer.len());
 
         val.state.comment.push(val.state.this_char_span);
         debug!("Comment: [{:?}]", val.state.comment);
-
         val.token_spans.push(TokenSpan::from(val.state));
 
         StateMachine {
-            state: End {},
+            state: Start {
+                char_buffer: char_buffer,
+                this_char_span: CharSpan { location: next_char_location, this_char: new_char},
+                next_char_span: match next_char {
+                    None => None,
+                    Some(ref char_ref) => Some(CharSpan { location: next_char_location.add_column(), this_char: char_ref})
+                },
+            },
             token_spans: val.token_spans,
         }
     }
@@ -295,7 +303,7 @@ impl<'machine, 'state> StateMachineWrapper<'state> {
                 debug!("Currently in State: StateMachineWrapper::MultiLineComment");
                 debug!("this_char: {:?} next_char: {:?}", this_char, next_char);
                 if next_char.is_none() {
-                    return StateMachineWrapper::End(StateMachine::<MultiLineComment>::finish(val));
+                    return StateMachineWrapper::MultiLineComment(val);
                 }
                 match this_char {
                     '*'     => {
@@ -304,7 +312,7 @@ impl<'machine, 'state> StateMachineWrapper<'state> {
                             Some(ref char_span) => match char_span.this_char {
                                 '/' =>  {
                                     debug!("Matched /");
-                                    StateMachineWrapper::End(StateMachine::<MultiLineComment>::finish(val))
+                                    StateMachineWrapper::Start(StateMachine::<MultiLineComment>::finish(val))
                                 },
                                 _ => StateMachineWrapper::MultiLineComment(StateMachine::<MultiLineComment>::append(val))
                             }
@@ -339,7 +347,7 @@ impl<'factory> ParserFactory<'factory> {
         })
     }
 
-    pub fn parse<'parse>(mut self, line_num: usize, char_buffer: &'factory [char]) -> ParseResult<Vec<TokenSpan>> {
+    pub fn parse<'parse>(mut self, mut line_num: usize, char_buffer: &'factory [char], parser: &'factory mut Parser) -> ParseResult<Vec<TokenSpan>> {
         debug!("ParserFactory::parse()");
 
         self.machine_wrapper = StateMachineWrapper::Start(StateMachine::start(line_num, &char_buffer));
@@ -348,7 +356,15 @@ impl<'factory> ParserFactory<'factory> {
             debug!("ParserFactory::parse() loop");
             self.machine_wrapper = self.machine_wrapper.step();
             match self.machine_wrapper {
-                StateMachineWrapper::End(machine) => return Ok(machine.token_spans),
+                StateMachineWrapper::MultiLineComment(ref val) => {
+                    if val.state.next_char_span.is_none() {
+                        let parsed_line = parser.read_line()?;
+                        let chars: Vec<char> = parsed_line.buffer.chars().collect(); // FIXME: Thats an allocaiton right there!
+                        line_num = parsed_line.line_num;
+                        self.machine_wrapper = StateMachineWrapper::MultiLineComment(val);
+                    }
+                }
+                StateMachineWrapper::End(val) => return Ok(val.token_spans),
                 _ => {},
             }
         }
@@ -368,11 +384,15 @@ impl ParserWrapper {
 
     pub fn parse(&mut self) -> ParseResult<Vec<TokenSpan>> {
         self.parser.open()?;
-        let parsed_line = self.parser.read_line()?;
-        let chars: Vec<char> = parsed_line.buffer.chars().collect(); // FIXME: Thats an allocaiton right there!
-        let factory = ParserFactory::new()?;
-        let tokens = factory.parse(parsed_line.line_num, &chars)?;
 
+        let mut tokens = Vec::new();
+
+        for _ in 0..5 {
+            let parsed_line = self.parser.read_line()?;
+            let chars: Vec<char> = parsed_line.buffer.chars().collect(); // FIXME: Thats an allocaiton right there!
+            let factory = ParserFactory::new()?;
+            tokens.append(&mut factory.parse(parsed_line.line_num, &chars, &mut self.parser)?);
+        }
         Ok(tokens)
     }
 }
