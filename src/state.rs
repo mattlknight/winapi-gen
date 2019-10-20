@@ -2,6 +2,9 @@ use log::debug;
 use super::token::{Location, Token, TokenSpan};
 use std::{thread, time};
 use std::fmt;
+use std::path::Path;
+use super::parser::Parser;
+use failure::Error;
 
 // Goals for State Machine
 // 1. Takes ()
@@ -21,6 +24,8 @@ use std::fmt;
 
 // state machine needs an internal context to hold the thing that it is building up
 
+pub type ParseResult<T> = Result<T, Error>;
+
 #[derive(Debug, Clone, Copy)]
 pub struct CharSpan<'span> {
     location: Location,
@@ -39,7 +44,7 @@ pub struct StateMachine<S> {
 }
 
 impl<'state> StateMachine<Start<'state>> {
-    pub fn new(line_num: usize, char_buffer: &'state[char]) -> Self {
+    pub fn start(line_num: usize, char_buffer: &'state[char]) -> Self {
         debug!("StateMachine::new() line_num: {} buff_len: {}", line_num, char_buffer.len());
         StateMachine {
             state: Start::new(line_num, &char_buffer),
@@ -250,6 +255,7 @@ impl<'machine, 'state> From<StateMachine<Comment<'state>>> for StateMachine<End>
 }
 
 pub enum StateMachineWrapper<'state> {
+    New,
     Start(StateMachine<Start<'state>>),
     Comment(StateMachine<Comment<'state>>),
     MultiLineComment(StateMachine<MultiLineComment<'state>>),
@@ -261,6 +267,7 @@ impl<'machine, 'state> StateMachineWrapper<'state> {
         debug!("StateMachineWrapper::step()");
         thread::sleep(time::Duration::from_secs(1));
         self = match self {
+            StateMachineWrapper::New => StateMachineWrapper::New,
             StateMachineWrapper::Start(val) => {
                 let this_char = val.state.this_char_span.this_char;
                 let next_char = val.state.next_char_span;
@@ -319,27 +326,53 @@ impl<'machine, 'state> StateMachineWrapper<'state> {
     }
 }
 
-pub struct ParserFactory<'machine> {
-    pub machine_wrapper: StateMachineWrapper<'machine>,
+pub struct ParserFactory<'factory> {
+    pub machine_wrapper: StateMachineWrapper<'factory>,
 }
 
-impl<'machine> ParserFactory<'machine> {
-    pub fn new(line_num: usize, char_buffer: &'machine [char]) -> Self {
+impl<'factory> ParserFactory<'factory> {
+    pub fn new() -> ParseResult<Self> {
         debug!("ParserFactory::new()");
-        ParserFactory {
-            machine_wrapper: StateMachineWrapper::Start(StateMachine::new(line_num, char_buffer)),
-        }
+
+        Ok(ParserFactory {
+            machine_wrapper: StateMachineWrapper::New,
+        })
     }
 
-    pub fn parse(mut self) -> Vec<TokenSpan> {
+    pub fn parse<'parse>(mut self, line_num: usize, char_buffer: &'factory [char]) -> ParseResult<Vec<TokenSpan>> {
         debug!("ParserFactory::parse()");
+
+        self.machine_wrapper = StateMachineWrapper::Start(StateMachine::start(line_num, &char_buffer));
+
         loop {
             debug!("ParserFactory::parse() loop");
             self.machine_wrapper = self.machine_wrapper.step();
             match self.machine_wrapper {
-                StateMachineWrapper::End(machine) => return machine.token_spans,
+                StateMachineWrapper::End(machine) => return Ok(machine.token_spans),
                 _ => {},
             }
         }
+    }
+}
+
+pub struct ParserWrapper {
+    parser: Parser,
+}
+
+impl ParserWrapper {
+    pub fn new<T: AsRef<Path>>(path: T) -> ParseResult<Self> {
+        Ok(ParserWrapper {
+            parser: Parser::new(path)?,
+        })
+    }
+
+    pub fn parse(&mut self) -> ParseResult<Vec<TokenSpan>> {
+        self.parser.open()?;
+        let parsed_line = self.parser.read_line()?;
+        let chars: Vec<char> = parsed_line.buffer.chars().collect(); // FIXME: Thats an allocaiton right there!
+        let factory = ParserFactory::new()?;
+        let tokens = factory.parse(parsed_line.line_num, &chars)?;
+
+        Ok(tokens)
     }
 }

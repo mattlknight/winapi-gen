@@ -21,16 +21,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     info!("Started winapi-gen");
 
-    let mut parser = Parser::new(&WINAPI_ROOT_PATH.join("um/iphlpapi.h"))?;
-    parser.open()?;
-    let mut tokens = Vec::new();
-    for _ in 0..4 {
-        let parsed_line = parser.read_line()?;
-        let chars: Vec<char> = parsed_line.buffer.chars().collect(); // FIXME: Thats an allocaiton right there!
-        tokens.append(&mut state::ParserFactory::new(parsed_line.line_num, &chars).parse());
-        debug!("tokens: {:?}", tokens);
-        // let _tokens = Tokenizer::go(&parsed_line)?;
-    }
+    let mut parser = state::ParserWrapper::new(&WINAPI_ROOT_PATH.join("um/iphlpapi.h"))?;
+    let tokens = parser.parse()?;
+    debug!("tokens: {:?}", tokens);
 
     Ok(())
 }
