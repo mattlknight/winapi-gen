@@ -3,7 +3,7 @@ use super::token::{Location, Token, TokenSpan};
 use std::{thread, time};
 use std::fmt;
 use std::path::Path;
-use super::parser::Parser;
+use super::header_parser::Parser;
 use failure::Error;
 
 // Goals for State Machine
