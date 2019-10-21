@@ -21,41 +21,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     info!("Started winapi-gen");
 
-    // let mut parser = state::ParserWrapper::new(&WINAPI_ROOT_PATH.join("um/iphlpapi.h"))?;
+    let header_file_path = &WINAPI_ROOT_PATH.join("um/iphlpapi.h");
+    let _file = winapi_gen::file::read_complete_file(header_file_path)?;
+
+    // let mut parser = state::ParserWrapper::new())?;
     // let tokens = parser.parse()?;
     // debug!("tokens: {:?}", tokens);
-
-    whitespace_fn();
+    // println!("{}", file);
+    // winapi_gen::compile(&file).expect("OH NO").interpret();
 
     Ok(())
-}
-
-fn whitespace_fn() {
-    use std::io::*;
-
-    let mut source = String::new();
-    match std::env::args().nth(1) {
-        Some(filename) => {
-            use std::fs::File;
-
-            File::open(&filename)
-                .expect(&format!("Can't open {}", &filename))
-                .read_to_string(&mut source)
-                .expect(&format!("Can't read contents of {}", &filename));
-        }
-
-        None => {
-            stdin()
-                .read_to_string(&mut source)
-                .expect("Can't read stdin");
-        }
-    }
-
-    if source.is_empty() {
-        println!("Empty file");
-        return;
-    }
-
-    debug!("Compiling whitespace source code");
-    winapi_gen::compile(&source).expect("OH NO").interpret();
 }
