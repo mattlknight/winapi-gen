@@ -167,12 +167,11 @@ impl<'state> StateMachine<MultiLineComment<'state>> {
     fn append(val: StateMachine<MultiLineComment<'state>>) -> StateMachine<MultiLineComment<'state>> {
         debug!("StateMachine<MultiLineComment>::append()");
         
-        let next_char_location = val.state.this_char_span.location.add_column();
+        let mut next_char_location = val.state.this_char_span.location.add_column();
         let (new_char, char_buffer) = val.state.char_buffer.split_first().expect("First char in StateStart must be a valid char. Otherwise, what's the point even?!");
         let next_char = char_buffer.first();
 
         debug!("StateMachine<MultiLineComment>::append() char_location: {} this_char: {:?} next_char: {:?} buff_len: {}", next_char_location, new_char, next_char, char_buffer.len());
-
         
         let mut comment = val.state.comment;
         comment.push(val.state.this_char_span);
@@ -279,6 +278,7 @@ impl<'machine, 'state> StateMachineWrapper<'state> {
             StateMachineWrapper::Start(val) => {
                 let this_char = val.state.this_char_span.this_char;
                 let next_char = val.state.next_char_span;
+
                 debug!("Currently in State: StateMachineWrapper::Start");
                 debug!("this_char: {:?} next_char: {:?}", this_char, next_char);
                 match this_char {
@@ -292,36 +292,49 @@ impl<'machine, 'state> StateMachineWrapper<'state> {
                             None => unimplemented!(),
                         }
                     },
-                    '\n' => StateMachineWrapper::End(StateMachine::end()),
+                    // '\n' => StateMachineWrapper::End(StateMachine::end()),
                     _ => unimplemented!(),
                 }
             },
             StateMachineWrapper::Comment(_val) => unimplemented!(),
             StateMachineWrapper::MultiLineComment(val) => {
                 let this_char = val.state.this_char_span.this_char;
-                let next_char = val.state.next_char_span;
+                let mut next_char = val.state.next_char_span;
+
                 debug!("Currently in State: StateMachineWrapper::MultiLineComment");
-                debug!("this_char: {:?} next_char: {:?}", this_char, next_char);
-                if next_char.is_none() {
-                    return StateMachineWrapper::MultiLineComment(val);
-                }
+                debug!("this_char: {:?}", this_char);
+                // if next_char.is_none() {
+                //     return StateMachineWrapper::MultiLineComment(val);
+                // }
                 match this_char {
                     '*'     => {
                         debug!("Matched *");
                         match next_char {
-                            Some(ref char_span) => match char_span.this_char {
+                            Some(ref mut char_span) => {
+                                if char_span.this_char == &'\n' {
+                                    debug!("next_char.this_char == \\n");
+                                    char_span.location = char_span.location.add_line();
+                                    debug!("next_char.unwrap().location == {}", char_span.location);
+                                }
+                                debug!("next_char: {:?}", char_span);
+
+                                match char_span.this_char {
                                 '/' =>  {
                                     debug!("Matched /");
                                     StateMachineWrapper::Start(StateMachine::<MultiLineComment>::finish(val))
                                 },
                                 _ => StateMachineWrapper::MultiLineComment(StateMachine::<MultiLineComment>::append(val))
-                            }
+                            }}
                             None => {
                                 debug!("Matched None");
                                 unimplemented!();
                             },
                         }
                     },
+                    '\n' => {
+                        debug!("Matched \\n");
+                        StateMachineWrapper::End(StateMachine::end())
+                        },
                     _ => {
                         debug!("Matched _");
                         StateMachineWrapper::MultiLineComment(StateMachine::<MultiLineComment>::append(val))
@@ -356,14 +369,6 @@ impl<'factory> ParserFactory<'factory> {
             debug!("ParserFactory::parse() loop");
             self.machine_wrapper = self.machine_wrapper.step();
             match self.machine_wrapper {
-                StateMachineWrapper::MultiLineComment(ref val) => {
-                    if val.state.next_char_span.is_none() {
-                        let parsed_line = parser.read_line()?;
-                        let chars: Vec<char> = parsed_line.buffer.chars().collect(); // FIXME: Thats an allocaiton right there!
-                        line_num = parsed_line.line_num;
-                        self.machine_wrapper = StateMachineWrapper::MultiLineComment(val);
-                    }
-                }
                 StateMachineWrapper::End(val) => return Ok(val.token_spans),
                 _ => {},
             }
@@ -387,12 +392,10 @@ impl ParserWrapper {
 
         let mut tokens = Vec::new();
 
-        for _ in 0..5 {
-            let parsed_line = self.parser.read_line()?;
-            let chars: Vec<char> = parsed_line.buffer.chars().collect(); // FIXME: Thats an allocaiton right there!
-            let factory = ParserFactory::new()?;
-            tokens.append(&mut factory.parse(parsed_line.line_num, &chars, &mut self.parser)?);
-        }
+        let parsed_line = self.parser.read_string()?;
+        let chars: Vec<char> = parsed_line.buffer.chars().collect(); // FIXME: Thats an allocaiton right there!
+        let factory = ParserFactory::new()?;
+        tokens.append(&mut factory.parse(parsed_line.line_num, &chars, &mut self.parser)?);
         Ok(tokens)
     }
 }

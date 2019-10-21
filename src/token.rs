@@ -4,6 +4,7 @@ use failure::Error;
 // use std::io::{BufReader, BufRead};
 // use std::path::{Path, PathBuf};
 // use log::{debug, error, info};
+use log::debug;
 // use super::parser::ParsedLine;
 use std::fmt;
 
@@ -17,10 +18,13 @@ pub struct Location {
 
 impl Location {
     pub fn add_line(&self) -> Self {
-        Location {
+        debug!("Location: {} add_line()", self);
+        let new_location = Location {
             line: self.line + 1,
-            column: self.column,
-        }
+            column: 1,
+        };
+        debug!("new_location: {}", new_location);
+        new_location
     }
     pub fn add_column(&self) -> Self {
         Location {

@@ -1,6 +1,6 @@
 use failure::{format_err, Error};
 use std::fs;
-use std::io::{BufReader, BufRead};
+use std::io::{BufReader, BufRead, Read};
 use std::path::{Path, PathBuf};
 use log::{debug, error, info};
 
@@ -49,12 +49,26 @@ impl Parser {
         Ok(())
     }
 
-    pub fn read_line<'buffer>(&'buffer mut self) -> BufferResult<'buffer> {
+    // pub fn read_line<'buffer>(&'buffer mut self) -> BufferResult<'buffer> {
+    //     let reader = self.reader.as_mut().expect("File must be .open()'ed before reading");
+    //     let line_num = self.line_num;
+    //     debug!("read_line() line_num: {}", line_num);
+    //     self.buffer.clear();
+    //     let len = reader.read_line(&mut self.buffer)?;
+    //     debug!("read_line() read_line().len(): {}", len);
+    //     self.line_num += 1;
+
+    //     debug!("read_line() ->  (line_num: {}, bytes_read: {}, buffer: [{:?}])", line_num, len, &self.buffer);
+        
+    //     Ok(ParsedLine {line_num, bytes_read: len, buffer: &self.buffer })
+    // }
+
+    pub fn read_string<'buffer>(&'buffer mut self) -> BufferResult<'buffer> {
         let reader = self.reader.as_mut().expect("File must be .open()'ed before reading");
         let line_num = self.line_num;
         debug!("read_line() line_num: {}", line_num);
         self.buffer.clear();
-        let len = reader.read_line(&mut self.buffer)?;
+        let len = reader.read_to_string(&mut self.buffer)?;
         debug!("read_line() read_line().len(): {}", len);
         self.line_num += 1;
 
